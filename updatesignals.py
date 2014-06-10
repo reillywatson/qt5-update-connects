@@ -1,3 +1,4 @@
+import codecs
 import re
 import sys
 
@@ -15,21 +16,41 @@ class SignalInfo:
 def signalsForFile(path, lines):
 	signals = []
 	for lineNo, line in enumerate(lines):
-		pattern = r'^(?P<prefix>.*)connect\((?P<sender>\w+), SIGNAL\((?P<signal>\w+)\(.*\), (?P<receiver>\w+), SLOT\((?P<slot>\w+)\(.*\)(?P<connectiontype>, Qt::\w+)?\);$'
+		pattern = r'^(?P<prefix>.*)connect\((?P<sender>[\w\-\>_]+), SIGNAL\((?P<signal>\w+)\(.*\), (?P<receiver>[\w\-\>_]+), SLOT\((?P<slot>\w+)\(.*\)(?P<connectiontype>, Qt::\w+)?\);$'
 		m = re.search(pattern, line)
 		if m:
 			signals.append(SignalInfo(m.group('prefix'), m.group('sender'), m.group('signal'), m.group('receiver'), m.group('slot'), m.group('connectiontype'), path, lineNo))
 	return signals
+
+def typeInLine(line, varName):
+	words = re.split(r'[\W\<\>]+', line)
+	if varName in words:
+		return words[words.index(varName) - 1]
+	return ''
 
 def inferType(fileName, lines, varName, lineNo):
 	potentialTypes = []
 	if varName == 'this':
 		potentialTypes.append(fileName.split('/')[-1].split('.')[0])
 	for i in range(lineNo - 1, -1, -1):
-		line = lines[i]
-		words = re.split(r'[\W\<\>]+', line)
-		if varName in words:
-			potentialTypes.append(words[words.index(varName) - 1])
+		potentialTypes.append(typeInLine(lines[i], varName))
+	if varName != 'this' and not fileName.endswith('.h'):
+		try:
+			header = ''.join(fileName.split('.')[:-1]) + '.h'
+			for line in codecs.open(header, 'r', 'utf-8').read().split('\n'):
+				potentialTypes.append(typeInLine(line, varName))
+		except:
+			pass
+	if 'ui->' in varName:
+		try:
+			ui = ''.join(fileName.split('.')[:-1]) + '.ui'
+			search = r'class="(?P<classname>\w+)" name="%s"' % varName.split('->')[-1]
+			for line in codecs.open(ui, 'r', 'utf-8').read().split('\n'):
+				match = re.search(search, line)
+				if match:
+					potentialTypes.append(match.group('classname'))
+		except:
+			raise
 	return set([a for a in potentialTypes if len(a) > 0 and a[0].isupper()])
 
 def newStyleConnect(signal, senderTypes, receiverTypes):
@@ -42,11 +63,9 @@ def newStyleConnect(signal, senderTypes, receiverTypes):
 
 def updateConnects(filename):
 	import envoy
-	import codecs
 	lines = codecs.open(filename, 'r', 'utf-8').read().split('\n')
 	while lines[-1] == '\n':
 		lines = lines[:-1]
-	
 	for signal in signalsForFile(filename, lines):
 		potentialLines = [a for a in newStyleConnect(signal, inferType(filename, lines, signal.sender, signal.lineNo), inferType(filename, lines, signal.receiver, signal.lineNo))]
 		if len(potentialLines) > 0:
@@ -57,7 +76,7 @@ def updateConnects(filename):
 			newfile = codecs.open(filename, 'w', 'utf-8')
 			newfile.write('\n'.join(lines))
 			newfile.close()
-			ret = envoy.run('make')
+			ret = envoy.run('make -j8')
 			if ret.status_code == 0:
 				print 'success'
 				break
@@ -66,6 +85,8 @@ def updateConnects(filename):
 
 def findFiles(base):
 	import os
+	if os.path.isfile(base):
+		return [base]
 	files = []
 	for root, dirnames, filenames in os.walk(base):
 		for f in filenames:
