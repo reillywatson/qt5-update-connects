@@ -16,7 +16,7 @@ class SignalInfo:
 def signalsForFile(path, lines):
 	signals = []
 	for lineNo, line in enumerate(lines):
-		pattern = r'^(?P<prefix>.*)connect\((?P<sender>[\w\-\>_]+), SIGNAL\((?P<signal>\w+)\(.*\), (?P<receiver>[\w\-\>_]+), SLOT\((?P<slot>\w+)\(.*\)(?P<connectiontype>, Qt::\w+)?\);$'
+		pattern = r'^(?P<prefix>.*)connect\((?P<sender>[\w\-\>_]+), (SIGNAL|SLOT)\((?P<signal>\w+)\(.*\), (?P<receiver>[\w\-\>_]+), (SIGNAL|SLOT)\((?P<slot>\w+)\(.*\)(?P<connectiontype>, Qt::\w+)?\);$'
 		m = re.search(pattern, line)
 		if m:
 			signals.append(SignalInfo(m.group('prefix'), m.group('sender'), m.group('signal'), m.group('receiver'), m.group('slot'), m.group('connectiontype'), path, lineNo))
