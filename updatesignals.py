@@ -25,7 +25,10 @@ def signalsForFile(path, lines):
 def typeInLine(line, varName):
 	words = re.split(r'[\W\<\>]+', line)
 	if varName in words:
-		return words[words.index(varName) - 1]
+		t = words[words.index(varName) - 1]
+		if 'QPointer' in words:
+			return 'QPointer:' + t
+		return t
 	return ''
 
 def inferType(fileName, lines, varName, lineNo):
@@ -56,10 +59,19 @@ def inferType(fileName, lines, varName, lineNo):
 def newStyleConnect(signal, senderTypes, receiverTypes):
 	for senderType in senderTypes:
 		for receiverType in receiverTypes:
+			# TODO: this is gross
+			senderSuffix = ''
+			if 'QPointer:' in senderType:
+				senderSuffix = '.data()'
+				senderType = senderType.replace('QPointer:', '')
+			receiverSuffix = ''
+			if 'QPointer:' in receiverType:
+				receiverSuffix = '.data()'
+				receiverType = receiverType.replace('QPointer:', '')
 			connectType = ''
 			if signal.connectionType:
 				connectType = signal.connectionType
-			yield '%sconnect(%s, &%s::%s, %s, &%s::%s%s);' % (signal.prefix, signal.sender, senderType, signal.signal, signal.receiver, receiverType, signal.slot, connectType)
+			yield '%sconnect(%s%s, &%s::%s, %s%s, &%s::%s%s);' % (signal.prefix, signal.sender, senderSuffix, senderType, signal.signal, signal.receiver, receiverSuffix, receiverType, signal.slot, connectType)
 
 def updateConnects(filename):
 	import envoy
