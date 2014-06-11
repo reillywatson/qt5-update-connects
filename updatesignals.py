@@ -50,7 +50,7 @@ def inferType(fileName, lines, varName, lineNo):
 				if match:
 					potentialTypes.append(match.group('classname'))
 		except:
-			raise
+			pass
 	return set([a for a in potentialTypes if len(a) > 0 and a[0].isupper()])
 
 def newStyleConnect(signal, senderTypes, receiverTypes):
